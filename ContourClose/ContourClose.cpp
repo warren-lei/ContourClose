@@ -14,8 +14,7 @@ ContourClose::~ContourClose()
 	//do not forget to release the memory!!!
 }
 
-//封闭等值线
-void ContourClose::closeContour()
+std::vector<std::pair<int, double>> ContourClose::preprocessContourData()
 {
 	//读取原始等值线数据
 	ReadData *readFileData = new ReadData();
@@ -63,7 +62,7 @@ void ContourClose::closeContour()
 	m_allCrossPoints.push_back(std::make_pair(-1, rectPointD));
 
 	//用于记录等值线各端点到边界左上图廓点的距离
-	std::vector<std::pair<int, double> > allDistance;
+	std::vector<std::pair<int, double>> allDistance;
 	double tmpDis;
 	//计算所有未封闭等值线端点到边界左上图廓点的距离
 	for (int i = 0; i < m_allCrossPoints.size(); i++)
@@ -73,36 +72,15 @@ void ContourClose::closeContour()
 		allDistance.push_back(std::make_pair(m_allCrossPoints[i].first, tmpDis));
 	}
 
-	std::vector<std::pair<int, QPointF> > tempVec;
-	std::vector<std::pair<int, double> > tempD;
-	double distance1, distance2;
-	//根据到左上角图廓点距离大小，用冒泡法对未封闭等值线与边界线的交点排序
-	for (int i = 0; i < allDistance.size(); i++)
-	{
-		for (int j = allDistance.size() - 1; j > i; j--)
-		{
-			distance1 = allDistance[j - 1].second;
-			distance2 = allDistance[j].second;
-			if (distance2 < distance1)
-			{
-				//根据到边界顶点的距离，对边界序列点排序
-				tempVec.push_back(m_allCrossPoints[j - 1]);
-				//m_allCrossPoints.replace(j - 1, m_allCrossPoints[j]);
-				//m_allCrossPoints.replace(j, tempVec[0]);
-				m_allCrossPoints[j - 1] = m_allCrossPoints[j];
-				m_allCrossPoints[j] = tempVec[0];	
-				tempVec.clear();
+	return allDistance;
+}
 
-				//根据到边界顶点的距离，从小到大对距离排序
-				tempD.push_back(allDistance[j - 1]);
-				//allDistance.replace(j - 1, allDistance[j]);
-				//allDistance.replace(j, tempD[0]);
-				allDistance[j - 1] = allDistance[j];
-				allDistance[j] = tempD[0];
-				tempD.clear();
-			}
-		}
-	}
+//封闭等值线
+void ContourClose::closeContour()
+{
+	std::vector<std::pair<int, double>> allDistance = preprocessContourData();
+	//根据到左上角图廓点距离大小，对未封闭等值线与边界线的交点排序
+	quickSort(allDistance, 0, allDistance.size() - 1);
 
 	//每个端点参与构造封闭面的次数
 	int *closeNum = new int[m_allCrossPoints.size()];
@@ -110,13 +88,6 @@ void ContourClose::closeContour()
 	{
 		closeNum[j] = 0;
 	}
-
-	//标记每个点是否参与封闭
-	//bool *closeFlag = new bool[mAllCrossPoints.size()];
-	//for (int j = 0; j < mAllCrossPoints.size(); j++)
-	//{
-	//	closeFlag[j] = false;
-	//}
 
 	//根据已经排序的端点，寻找能构成一条闭合等值线的各段不闭合线段，构造封闭曲面
 	for (int i = 0; i < m_allCrossPoints.size() - 1; i++)
@@ -130,9 +101,6 @@ void ContourClose::closeContour()
 		QPointF firstPoint;
 		firstPoint = m_allCrossPoints[i].second;
 		tempNewContour.push_back(firstPoint);
-		//++closeNum[i];
-		//qDebug() << closeNum[i];
-		//closeFlag[i] = true;
 
 		//在边界点序列中 ,找出它的下一点 
 		QPointF nextPoint;
@@ -146,13 +114,6 @@ void ContourClose::closeContour()
 		nextContourID = m_allCrossPoints[i + 1].first;
 		QPointF nextOtherPoint;
 		QPolygonF nextContour;
-
-		//double tmpCVal1;
-		//计算第一个点所在等值线的值
-		//if (firtContourID != -1)
-		//{
-			//tmpCVal1 = mAllContourData[firtContourID].first;
-		//}
 
 		//用于临时记录一条封闭等值线的所有端点所在等值线的值
 		std::vector<double> theContourValue;
@@ -169,7 +130,7 @@ void ContourClose::closeContour()
 		//qDebug() << closeNum[i] << endl;
 
 		//每个端点都应该参与两次封闭
-		if (closeNum[i] < 2)//the next codes,even i do not understand what they are.
+		if (closeNum[i] < 2)
 		{
 			//如果是边界顶点，则其封闭次数只需要一次
 			if ((closeNum[i] == 1) && (firtContourID == -1))
@@ -190,10 +151,6 @@ void ContourClose::closeContour()
 				if (nextContourID == -1)
 				{
 					tempNewContour.push_back(nextPoint);
-					//++closeNum[i+1];//there is a bug
-					//closeFlag[i+1] = true;
-					//nextPoint = mAllCrossPoints[i+2].second;
-					//nextID = mAllCrossPoints[i+2].first;
 
 					//搜寻该点的序列号
 					int nextID;
@@ -219,9 +176,6 @@ void ContourClose::closeContour()
 						tempContourValue = m_allContourData[nextContourID].first;
 						theContourValue.push_back(tempContourValue);
 					}
-
-					//++closeNum[nextID+1];
-					//closeFlag[i+2] = true;
 				}
 				else//there is a bug
 				{
@@ -237,8 +191,6 @@ void ContourClose::closeContour()
 						{
 							tempNewContour.push_back(nextContour.at(j));
 						}
-						//mNewContourData.push_back(std::make_pair<double, QPolygonF>(tempVal, tempNewContour));
-						//tempNewContour = QPolygonF();//bug
 
 						nextOtherPoint = nextContour.at(0);
 						//等值线的另一端点若为起始点，该条等值线封闭结束，把nextPoint置为该点（while循环结束的条件）
@@ -295,9 +247,6 @@ void ContourClose::closeContour()
 									tempContourValue = m_allContourData[nextContourID].first;
 									theContourValue.push_back(tempContourValue);
 								}
-								//++closeNum[nextContourID];
-								//closeFlag[nextID] = true;
-								//closeFlag[nextOtherID] = true;
 							}
 							else
 							{
@@ -311,10 +260,6 @@ void ContourClose::closeContour()
 									tempContourValue = m_allContourData[nextContourID].first;
 									theContourValue.push_back(tempContourValue);
 								}
-
-								//++closeNum[nextContourID];
-								//closeFlag[nextID] = true;
-								//closeFlag[nextOtherID] = true;
 							}
 						}
 					}
@@ -325,9 +270,6 @@ void ContourClose::closeContour()
 						{
 							tempNewContour.push_back(nextContour.at(j));
 						}
-
-						//mNewContourData.push_back(std::make_pair<double, QPolygonF>(tempVal, tempNewContour));
-						//tempNewContour = QPolygonF();
 
 						nextOtherPoint = nextContour.at(nextContour.size() - 1);
 						//等值线的另一端点若为起始点，该条等值线封闭结束，把nextPoint置为该点（while循环结束的条件）
@@ -383,10 +325,6 @@ void ContourClose::closeContour()
 									tempContourValue = m_allContourData[nextContourID].first;
 									theContourValue.push_back(tempContourValue);
 								}
-
-								//++closeNum[nextContourID];
-								//closeFlag[nextID] = true;
-								//closeFlag[nextOtherID] = true;
 							}
 							else
 							{
@@ -400,16 +338,10 @@ void ContourClose::closeContour()
 									tempContourValue = m_allContourData[nextContourID].first;
 									theContourValue.push_back(tempContourValue);
 								}
-
-								//++closeNum[nextContourID];
-								//closeFlag[nextID] = true;
-								//closeFlag[nextOtherID] = true;
 							}
 						}
 
 					}
-					//++closeNum[i+1];//there is a bug
-					//closeFlag[i+2] = true;//there is a bug
 				}
 			}
 
@@ -426,20 +358,16 @@ void ContourClose::closeContour()
 			tempNewContour = QPolygonF();
 			theContourValue.clear();
 		}
-		/*else
-		{
-			continue;
-		}
-		*/
 	}
 
-	//closeNum = nullptr;
 	std::vector<int> tst;
 	for (int j = 0; j < m_allCrossPoints.size(); j++)
 	{
 		tst.push_back(closeNum[j]);
 	}
+
 	delete[] closeNum;
+	closeNum = nullptr;
 }
 
 //计算未封闭等值线端点到边界左上图廓点的距离（特殊矩形边界适用）
@@ -620,5 +548,37 @@ double ContourClose::twoPointDistance(QPointF point1, QPointF point2)
 std::vector<std::pair<double, QPolygonF> > ContourClose::getClosedContourData()
 {
 	return m_allClosedContourData;
+}
+
+void ContourClose::quickSort(std::vector<std::pair<int, double>> allDistVec, int l, int r)
+{
+	if (allDistVec.size() > 0 && l < r)
+	{
+		int i = l, j = r;
+		std::pair<int, double> x = allDistVec[l];
+		while (i < j)
+		{
+			while (i < j && allDistVec[j].second >= x.second)
+				--j;
+			if (i < j)
+			{
+				std::swap(allDistVec[i], allDistVec[j]);
+				std::swap(m_allCrossPoints[i], m_allCrossPoints[j]);
+				i++;
+			}
+
+			while (i < j && allDistVec[i].second < x.second)
+				++i;
+			if (i < j)
+			{
+				std::swap(allDistVec[j], allDistVec[i]);
+				std::swap(m_allCrossPoints[j], m_allCrossPoints[i]);
+				j--;
+			}
+		}
+		std::swap(allDistVec[i], x);
+		quickSort(allDistVec, l, i - 1); // 递归调用   
+		quickSort(allDistVec, i + 1, r);
+	}
 }
 

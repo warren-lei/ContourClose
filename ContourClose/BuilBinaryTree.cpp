@@ -6,15 +6,9 @@
 
 // 构造函数
 BuildBinTopoTree::BuildBinTopoTree(std::vector<std::pair<double, QPolygonF> > &iAllPolygonData)
-	:m_allPolygonData(iAllPolygonData)
+	: m_allPolygonData(iAllPolygonData)
+	, m_topologyBinaryTree(nullptr)
 {
-	//m_iallContourData = iallContourData;
-	//m_allPolygonData = iAllPolygonData;
-	m_topologyBinaryTree = nullptr;
-	//m_minX = minX;
-	//m_minY = minY;
-	//m_maxX = maxX;
-	//m_maxY = maxY;
 }
 
 BuildBinTopoTree::~BuildBinTopoTree()
@@ -55,21 +49,21 @@ void BuildBinTopoTree::makeTopologyBinaryTree()
 	double m_maxY = readFileData->getMaxY();
 	delete readFileData;
 
-	double root_x[] = { m_maxX, m_minX, m_minX, m_maxX, m_maxX };
-	double root_y[] = { m_minY, m_minY, m_maxY, m_maxY, m_minY };
-	QPolygonF root_array_data;
+	double rootX[] = { m_maxX, m_minX, m_minX, m_maxX, m_maxX };
+	double rootY[] = { m_minY, m_minY, m_maxY, m_maxY, m_minY };
+	
+	QPolygonF rootArrayData;
 	for (int i = 0; i < 5; i++)
 	{
-		root_array_data.append(QPointF(root_x[i], root_y[i]));
+		rootArrayData.append(QPointF(rootX[i], rootY[i]));
 	}
 
-	const int root_node_size = root_array_data.size();
-	int root_id = 0;
+	const int root_node_size = rootArrayData.size();
+	int rootID = 0;
 	double root_value = 0;
-	//ContourDataArray * root_array_data = new ContourDataArray( root_y, root_x, root_node_size);
 
-	ContourData * root_data = new ContourData(root_id, root_value, root_array_data);
-	TreeNode *root = new TreeNode(root_data, nullptr, nullptr, nullptr);
+	ContourData * rootData = new ContourData(rootID, root_value, rootArrayData);
+	TreeNode *root = new TreeNode(rootData, nullptr, nullptr, nullptr);
 	m_topologyBinaryTree = new TopologyTree(root);
 	//出错判断
 	if (0 == m_allPolygonData.size())
@@ -81,7 +75,6 @@ void BuildBinTopoTree::makeTopologyBinaryTree()
 	for (int i = 0; i < m_allPolygonData.size(); i++)
 	{
 		double contourValue = m_allPolygonData[i].first;
-		//ContourData * treenodedata = new ContourData(contour_id, contourValue, m_iallContourData[i]);
 		ContourData * treenodedata = new ContourData(contour_id, contourValue, m_allPolygonData[i].second);
 		m_topologyBinaryTree->insert(treenodedata);
 		++contour_id;

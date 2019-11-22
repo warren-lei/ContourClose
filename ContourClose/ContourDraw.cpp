@@ -24,12 +24,8 @@ ContouDraw::~ContouDraw()
 //等值线绘制及颜色填充
 void ContouDraw::paintEvent(QPaintEvent *event)
 {
-	//std::vector<ContourDataArray *> contourData;
-	//std::vector<std::pair<double, QPolygonF> > polygonData;
 	ReadData *readFileData = new ReadData();
 	readFileData->readContourData();
-	//contourData = readFileData->GetAllContourData();
-	//polygonData = readFileData->GetAllPolygonData();
 
 	std::vector<std::pair<double, QPolygonF> > closedPolygonData;
 	ContourClose *closedData = new ContourClose();
@@ -67,26 +63,26 @@ void ContouDraw::paintEvent(QPaintEvent *event)
 	delete readFileData;
 
 	//设置边界高度与宽度
-	double t_width = (maxX - minX) / 50.0;
-	double t_height = (maxY - minY) / 50.0;
+	double borderWidth = (maxX - minX) / 50.0;
+	double borderHeight = (maxY - minY) / 50.0;
 
 	QPainter painter(this);
 	painter.save();
 	painter.setRenderHint(QPainter::Antialiasing, true);
-	this->resize(t_width*1.5, t_height*1.5);
+	this->resize(borderWidth*1.5, borderHeight*1.5);
 	painter.setPen(Qt::gray);//设置网格线条颜色
-	painter.translate(t_width / 4, t_height*1.2);
+	painter.translate(borderWidth / 4, borderHeight*1.2);
 
 	int step = 20;
 	//画网格 
 	for (int i = 1; i <= 22; i++)
 	{
-		painter.drawLine(0, -t_height + step * i, t_width, -t_height + step * i);
+		painter.drawLine(0, -borderHeight + step * i, borderWidth, -borderHeight + step * i);
 	}
 
 	for (int j = 1; j <= 28; j++)
 	{
-		painter.drawLine(j*step, -t_height, j*step, 0);
+		painter.drawLine(j*step, -borderHeight, j*step, 0);
 	}
 
 	//绘制矩形边界
@@ -98,31 +94,28 @@ void ContouDraw::paintEvent(QPaintEvent *event)
 
 	BuildBinTopoTree *contourBinTree = new BuildBinTopoTree(closedPolygonData);
 	contourBinTree->makeTopologyBinaryTree();
-	//BuildBinTopoTree *contourBinTree = new BuildBinTopoTree(polygonData, contourData);
-	//contourBinTree->make_preorder_contour_list();
 	TreeNode *root = contourBinTree->m_topologyBinaryTree->getMyRoot();
 	contourBinTree->preoderTopologyBinaryTree(root);
-	//contourBinTree->make_preorder_contour_list();
-	std::vector<TreeNode *> temp_node = contourBinTree->getPreorderContourTree();
+	std::vector<TreeNode *> tempNode = contourBinTree->getPreorderContourTree();
 
 	//所有的多边形数据以及多边形对应的颜色值
 	std::vector<std::pair<QColor, QPolygonF> > oderedContourData;
 	//设置起始颜色
-	QColor t_startColor = Qt::red;
+	QColor startColor = Qt::red;
 	//设置终点颜色
-	QColor t_endColor = Qt::blue;
-	QColor t_color;
-	QPolygonF t_polygon;
+	QColor endColor = Qt::blue;
+	QColor qColor;
+	QPolygonF qPolygon;
 
 	//获取排序好的多边形以及该多边形对应的颜色值
-	for (int i = 1; i < temp_node.size(); i++)
+	for (int i = 1; i < tempNode.size(); i++)
 	{
-		int t_id = temp_node[i]->getCoutourData()->getMyContourID() - 1;
+		int t_id = tempNode[i]->getCoutourData()->getMyContourID() - 1;
 		double currentVal = closedPolygonData[t_id].first;
-		t_polygon = closedPolygonData[t_id].second;
-		t_color = contourFill(currentVal, minV, maxV, t_startColor, t_endColor);
-		oderedContourData.push_back(std::make_pair(t_color, t_polygon));
-		t_polygon = QPolygonF();
+		qPolygon = closedPolygonData[t_id].second;
+		qColor = contourFill(currentVal, minV, maxV, startColor, endColor);
+		oderedContourData.push_back(std::make_pair(qColor, qPolygon));
+		qPolygon = QPolygonF();
 	}
 
 	//坐标变换
@@ -163,7 +156,7 @@ void ContouDraw::paintEvent(QPaintEvent *event)
 		//设置字体粗细
 		qFont.setBold(false);
 		painter.setFont(qFont);
-		int t_id = temp_node[i + 1]->getCoutourData()->getMyContourID() - 1;
+		int t_id = tempNode[i + 1]->getCoutourData()->getMyContourID() - 1;
 		int currentVal = closedPolygonData[t_id].first;
 	
 		QString qstrEleInfo = QVariant(currentVal).toString();
@@ -181,21 +174,21 @@ void ContouDraw::paintEvent(QPaintEvent *event)
 QColor ContouDraw::contourFill(double curentValue, double minValue, double maxValue, QColor startColor, QColor endColor)
 {
 	//获取起始颜色的RGB值
-	int t_startR = qRed(startColor.rgb());
-	int t_startG = qGreen(startColor.rgb());
-	int t_startB = qBlue(startColor.rgb());
+	int startR = qRed(startColor.rgb());
+	int startG = qGreen(startColor.rgb());
+	int startB = qBlue(startColor.rgb());
 	//获取终点颜色的RBG值
-	int t_endR = qRed(endColor.rgb());
-	int t_endG = qGreen(endColor.rgb());
-	int t_endB = qBlue(endColor.rgb());
+	int endR = qRed(endColor.rgb());
+	int endG = qGreen(endColor.rgb());
+	int endB = qBlue(endColor.rgb());
 	//线性插值，获取当前值对应的RBG值
 	double numerator = curentValue - minValue;
 	double denominator = maxValue - minValue;
 	double ratio = numerator / denominator;
 	//double ratio = (curentValue - minValue)/(maxValue - minValue);
-	int r = (t_endR - t_startR) * ratio + t_startR;
-	int g = (t_endG - t_startG) * ratio + t_startG;
-	int b = (t_endB - t_startB) * ratio + t_startB;
+	int r = (endR - startR) * ratio + startR;
+	int g = (endG - startG) * ratio + startG;
+	int b = (endB - startB) * ratio + startB;
 
 	QColor color(qRgb(r, g, b));
 

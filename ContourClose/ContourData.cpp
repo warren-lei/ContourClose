@@ -9,9 +9,6 @@ ContourData::ContourData(int &contour_id, double &contourvalue, QPolygonF &data)
 	, m_myContourValue(contourvalue)
 	, m_myArrayData(data)
 {
-	//mycontour_id = contour_id;
-	//myContourValue = contourvalue;
-	//myArrayData = data;
 }
 
 ContourData::~ContourData()
