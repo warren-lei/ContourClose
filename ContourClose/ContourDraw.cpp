@@ -101,9 +101,9 @@ void ContouDraw::paintEvent(QPaintEvent *event)
 	//所有的多边形数据以及多边形对应的颜色值
 	std::vector<std::pair<QColor, QPolygonF> > oderedContourData;
 	//设置起始颜色
-	QColor startColor = Qt::red;
+	QColor startColor = Qt::yellow;
 	//设置终点颜色
-	QColor endColor = Qt::blue;
+	QColor endColor = Qt::red;
 	QColor qColor;
 	QPolygonF qPolygon;
 

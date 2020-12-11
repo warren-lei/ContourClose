@@ -6,7 +6,7 @@
 
 ContourClose::ContourClose()
 {
-
+	preprocessContourData();
 }
 
 ContourClose::~ContourClose()
@@ -14,23 +14,23 @@ ContourClose::~ContourClose()
 	//do not forget to release the memory!!!
 }
 
-std::vector<std::pair<int, double>> ContourClose::preprocessContourData()
+void ContourClose::preprocessContourData()
 {
 	//读取原始等值线数据
 	ReadData *readFileData = new ReadData();
 	readFileData->readContourData();
 	m_allContourData = readFileData->getAllPolygonData();
-	double minX = readFileData->getMinX();
-	double minY = readFileData->getMinY();
-	double maxX = readFileData->getMaxX();
-	double maxY = readFileData->getMaxY();
+	m_minX = readFileData->getMinX();
+	m_minY = readFileData->getMinY();
+	m_maxX = readFileData->getMaxX();
+	m_maxY = readFileData->getMaxY();
 	delete readFileData;
 
 	//矩形边界的四个顶点坐标
-	QPointF rectPointA = QPointF(minX, maxY);
-	QPointF rectPointD = QPointF(maxX, maxY);
-	QPointF rectPointC = QPointF(maxX, minY);
-	QPointF rectPointB = QPointF(minX, minY);
+	m_rect.rectPointA = QPointF(m_minX, m_maxY);
+	m_rect.rectPointD = QPointF(m_maxX, m_maxY);
+	m_rect.rectPointC = QPointF(m_maxX, m_minY);
+	m_rect.rectPointB = QPointF(m_minX, m_minY);
 
 	int contourSize = m_allContourData.size();
 	QPointF startPoint, endPoint;
@@ -56,405 +56,148 @@ std::vector<std::pair<int, double>> ContourClose::preprocessContourData()
 	}
 
 	//将矩形的四个顶点加入到点集
-	m_allCrossPoints.push_back(std::make_pair(-1, rectPointA));
-	m_allCrossPoints.push_back(std::make_pair(-1, rectPointB));
-	m_allCrossPoints.push_back(std::make_pair(-1, rectPointC));
-	m_allCrossPoints.push_back(std::make_pair(-1, rectPointD));
+	m_allCrossPoints.push_back(std::make_pair(-1, m_rect.rectPointA));
+	m_allCrossPoints.push_back(std::make_pair(-1, m_rect.rectPointB));
+	m_allCrossPoints.push_back(std::make_pair(-1, m_rect.rectPointC));
+	m_allCrossPoints.push_back(std::make_pair(-1, m_rect.rectPointD));
 
-	//用于记录等值线各端点到边界左上图廓点的距离
-	std::vector<std::pair<int, double>> allDistance;
-	double tmpDis;
 	//计算所有未封闭等值线端点到边界左上图廓点的距离
 	for (int i = 0; i < m_allCrossPoints.size(); i++)
 	{
-		//tmpDis = getDistance(mAllCrossPoints[i].second);
-		tmpDis = getDistance(m_allCrossPoints[i]);
-		allDistance.push_back(std::make_pair(m_allCrossPoints[i].first, tmpDis));
+		double tmpDis = getDistance(m_allCrossPoints[i]);
+		m_allCrossedPointsSortedByDist.push_back(std::make_tuple(tmpDis, 
+			m_allCrossPoints[i].first, m_allCrossPoints[i].second));
 	}
 
-	return allDistance;
+	std::sort(std::begin(m_allCrossedPointsSortedByDist), std::end(m_allCrossedPointsSortedByDist),
+		[](std::tuple<double, int, QPointF> const &t1, std::tuple<double, int, QPointF> const &t2)
+	{
+		return std::get<0>(t1) < std::get<0>(t2);
+	});
 }
 
 //封闭等值线
 void ContourClose::closeContour()
-{
-	std::vector<std::pair<int, double>> allDistance = preprocessContourData();
-	//根据到左上角图廓点距离大小，对未封闭等值线与边界线的交点排序
-	quickSort(allDistance, 0, allDistance.size() - 1);
-
-	//每个端点参与构造封闭面的次数
-	int *closeNum = new int[m_allCrossPoints.size()];
-	for (int j = 0; j < m_allCrossPoints.size(); j++)
+{ 
+	//每个端点参与构造封闭面的次数，每个交叉点的封闭次数（除顶点外，都应该为两次）
+	size_t totalSize = m_allCrossedPointsSortedByDist.size();
+	int *closeNum = new int[totalSize];
+	for (int j = 0; j < totalSize; j++)
 	{
 		closeNum[j] = 0;
 	}
 
-	//根据已经排序的端点，寻找能构成一条闭合等值线的各段不闭合线段，构造封闭曲面
-	for (int i = 0; i < m_allCrossPoints.size() - 1; i++)
+
+	for (size_t i = 0; i < totalSize; i++)
 	{
-		//用于存储新闭合的等值线
-		QPolygonF tempNewContour;
-		//用于存储新闭合等值线的值
-		double tempVal = 0.0;
+		QPointF startPoint = std::get<2>(m_allCrossedPointsSortedByDist[i]);
+		int startContourId = std::get<1>(m_allCrossedPointsSortedByDist[i]);
+		QPointF endPoint;
 
-		//在边界点序列中取出一点，将此点加入到区域中 ,并且标记其使用次数
-		QPointF firstPoint;
-		firstPoint = m_allCrossPoints[i].second;
-		tempNewContour.push_back(firstPoint);
+		if (startContourId != -1)
+		{
+			endPoint = getAnotherEndPointOnContour(startContourId, startPoint);
+		}
+		
+		if ((i != 0 && startContourId == -1) || closeNum[i] == 2)
+		{
+			continue;
+		}
 
-		//在边界点序列中 ,找出它的下一点 
-		QPointF nextPoint;
-		nextPoint = m_allCrossPoints[i + 1].second;
+		++closeNum[i];
 
-		//closeFlag[i+1] = true;
-
-		int firtContourID;
-		int nextContourID;
-		firtContourID = m_allCrossPoints[i].first;
-		nextContourID = m_allCrossPoints[i + 1].first;
-		QPointF nextOtherPoint;
-		QPolygonF nextContour;
+		QPolygonF newContour;
+		newContour.push_back(startPoint);
+		int index = i + 1;
+		int indexContourId = (((unsigned int)(-1)) >> 1); // INT_MAX
 
 		//用于临时记录一条封闭等值线的所有端点所在等值线的值
-		std::vector<double> theContourValue;
-		//用于临时记录某一个端点所在等值线的值
-		double tempContourValue;
+		std::vector<double> newContourValue;
 
-		//若该点不为边界顶点，记录其所在等值线的值
-		if (nextContourID != -1)
+		while (index < totalSize &&
+			!isTheSamePoint(endPoint, std::get<2>(m_allCrossedPointsSortedByDist[index])))
 		{
-			tempContourValue = m_allContourData[nextContourID].first;
-			theContourValue.push_back(tempContourValue);
-		}
+			QPointF indexPoint = std::get<2>(m_allCrossedPointsSortedByDist[index]);
+			indexContourId = std::get<1>(m_allCrossedPointsSortedByDist[index]);
 
-		//qDebug() << closeNum[i] << endl;
-
-		//每个端点都应该参与两次封闭
-		if (closeNum[i] < 2)
-		{
-			//如果是边界顶点，则其封闭次数只需要一次
-			if ((closeNum[i] == 1) && (firtContourID == -1))
+			if (indexContourId != -1)
 			{
-				continue;
-			}
+				++closeNum[index];
+				QPolygonF indexContour = m_allContourData[indexContourId].second;
+				int indexPointId = getPointIndexInContour(indexContourId, indexPoint);
 
-			//i+1个点的封闭次数加1
-			++closeNum[i + 1];
-			//一直循环，直到回到起始点为止
-			//double xPval = fabs(nextPoint.x() - firstPoint.x());
-			//double yPval = fabs(nextPoint.y() - firstPoint.y());
-			while (fabs(nextPoint.x() - firstPoint.x()) > 1e-6
-				|| fabs(nextPoint.y() - firstPoint.y()) > 1e-6)//bug
-			{
-				//如果端点的ID号为-1，表示其为边界顶点，将此点加入到区域中 ,并且标记其使用次数
-				//否则为等值线的端点，判断端点为起始点或者终点，将此点加入到区域中 ,并且标记其使用次数
-				if (nextContourID == -1)
+				if (indexPointId == 0)
 				{
-					tempNewContour.push_back(nextPoint);
-
-					//搜寻该点的序列号
-					int nextID;
-					for (int k = 0; k < m_allCrossPoints.size(); k++)
+					newContour.append(indexContour);
+				}
+				else
+				{
+					for (int p = indexContour.size() - 1; p >= 0; p--)
 					{
-						//this is a safe way to find the next point,but it is not efficient. 
-						QPointF tmpPoint = m_allCrossPoints[k].second;
-						double xxTmpVal = fabs(tmpPoint.x() - nextPoint.x());
-						double yyTmpVal = fabs(tmpPoint.y() - nextPoint.y());
-						if (xxTmpVal < 1e-6	&& yyTmpVal < 1e-6)
-						{
-							nextID = k;
-						}
-					}
-
-					nextPoint = m_allCrossPoints[nextID + 1].second;
-					nextContourID = m_allCrossPoints[nextID + 1].first;
-					++closeNum[nextID + 1];
-
-					//若该点不为边界顶点，记录其所在等值线的值
-					if (nextContourID != -1)
-					{
-						tempContourValue = m_allContourData[nextContourID].first;
-						theContourValue.push_back(tempContourValue);
+						newContour.push_back(indexContour[p]);
 					}
 				}
-				else//there is a bug
+
+				newContourValue.push_back(m_allContourData[indexContourId].first);
+				QPointF endPointOnIndexContour = getAnotherEndPointOnContour(indexContourId, indexPoint);
+				index = getIndexInAllCrossedPointsSortedByDist(endPointOnIndexContour);
+				assert(index != -1 && "index error!");
+				++closeNum[index];
+				index++;
+			}
+			else
+			{
+				newContour.push_back(indexPoint);
+				index++;
+			}
+		}
+
+		if (index < totalSize)
+		{
+			++closeNum[index];
+			int indexPointId = getPointIndexInContour(startContourId, endPoint);
+			QPolygonF startContour = m_allContourData[startContourId].second;
+			if (indexPointId == 0)
+			{			
+				for (int id = 0; id < startContour.size() - 2; id++)
 				{
-					nextContour = m_allContourData[nextContourID].second;
-
-					//若此点为等值线的终点 ,将此条等值线反向加入到区域中 ,然后把等值线的另一端点
-					//当做当前点，保存其序号，标记其使用次数，继续向后查找下一个点
-					double xxPval = fabs(nextPoint.x() - nextContour.at(nextContour.size() - 1).x());
-					double yyPval = fabs(nextPoint.y() - nextContour.at(nextContour.size() - 1).y());
-					if (xxPval < 1e-6 && yyPval < 1e-6)
-					{
-						for (int j = nextContour.size() - 1; j >= 0; j--)
-						{
-							tempNewContour.push_back(nextContour.at(j));
-						}
-
-						nextOtherPoint = nextContour.at(0);
-						//等值线的另一端点若为起始点，该条等值线封闭结束，把nextPoint置为该点（while循环结束的条件）
-						if (fabs(nextOtherPoint.x() - firstPoint.x()) < 1e-6
-							&& fabs(nextOtherPoint.y() - firstPoint.y()) < 1e-6)
-						{
-							nextPoint = m_allCrossPoints[i].second;
-							nextContourID = m_allCrossPoints[i].first;
-							++closeNum[i];
-
-							//若该点不为边界顶点，记录其所在等值线的值
-							if (nextContourID != -1)
-							{
-								tempContourValue = m_allContourData[nextContourID].first;
-								theContourValue.push_back(tempContourValue);
-							}
-						}
-						else
-						{
-							int nextOtherID;
-							//搜寻该点的序列号
-							for (int k = 0; k < m_allCrossPoints.size(); k++)
-							{
-								QPointF tmpPoint = m_allCrossPoints[k].second;
-								double xTmpVal = fabs(tmpPoint.x() - nextOtherPoint.x());
-								double yTmpVal = fabs(tmpPoint.y() - nextOtherPoint.y());
-								if (xTmpVal < 1e-6 && yTmpVal < 1e-6)
-								{
-									nextOtherID = k;
-									break;
-								}
-							}
-
-							++closeNum[nextOtherID];
-							int nextOtherContourID = m_allCrossPoints[nextOtherID].first;
-
-							//若该点不为边界顶点，记录其所在等值线的值
-							if (nextOtherContourID != -1)
-							{
-								tempContourValue = m_allContourData[nextOtherContourID].first;
-								theContourValue.push_back(tempContourValue);
-							}
-
-							//如果寻找到最后一个点，其下一个点则为起始点
-							if (nextOtherID == (m_allCrossPoints.size() - 1))
-							{
-								nextPoint = m_allCrossPoints[0].second;
-								nextContourID = m_allCrossPoints[0].first;
-								++closeNum[0];
-
-								//若该点不为边界顶点，记录其所在等值线的值
-								if (nextContourID != -1)
-								{
-									tempContourValue = m_allContourData[nextContourID].first;
-									theContourValue.push_back(tempContourValue);
-								}
-							}
-							else
-							{
-								nextPoint = m_allCrossPoints[nextOtherID + 1].second;
-								nextContourID = m_allCrossPoints[nextOtherID + 1].first;
-								++closeNum[nextOtherID + 1];
-
-								//若该点不为边界顶点，记录其所在等值线的值
-								if (nextContourID != -1)
-								{
-									tempContourValue = m_allContourData[nextContourID].first;
-									theContourValue.push_back(tempContourValue);
-								}
-							}
-						}
-					}
-					else
-					{//若此点为等值线的起始点 ,将此条等值线正向加入到区域中 ,然后把等值线的另一端点
-					//当做当前点，保存其序号，标记其使用次数，继续向后查找下一个点
-						for (int j = 0; j < nextContour.size(); j++)
-						{
-							tempNewContour.push_back(nextContour.at(j));
-						}
-
-						nextOtherPoint = nextContour.at(nextContour.size() - 1);
-						//等值线的另一端点若为起始点，该条等值线封闭结束，把nextPoint置为该点（while循环结束的条件）
-						if (fabs(nextOtherPoint.x() - firstPoint.x()) < 1e-6
-							&& fabs(nextOtherPoint.y() - firstPoint.y()) < 1e-6)
-						{
-							nextPoint = m_allCrossPoints[i].second;
-							nextContourID = m_allCrossPoints[i].first;
-							++closeNum[i];
-
-							//若该点不为边界顶点，记录其所在等值线的值
-							if (nextContourID != -1)
-							{
-								tempContourValue = m_allContourData[nextContourID].first;
-								theContourValue.push_back(tempContourValue);
-							}
-						}
-						else
-						{
-							int nextOtherID;
-							//搜寻该点的序列号
-							for (int k = 0; k < m_allCrossPoints.size(); k++)
-							{
-								QPointF tmpPoint = m_allCrossPoints[k].second;
-								double xxTmpVal = fabs(tmpPoint.x() - nextOtherPoint.x());
-								double yyTmpVal = fabs(tmpPoint.y() - nextOtherPoint.y());
-								if (xxTmpVal < 1e-6	&& yyTmpVal < 1e-6)
-								{
-									nextOtherID = k;
-								}
-							}
-
-							++closeNum[nextOtherID];
-							int nextOtherContourID = m_allCrossPoints[nextOtherID].first;
-
-							//若该点不为边界顶点，记录其所在等值线的值
-							if (nextOtherContourID != -1)
-							{
-								tempContourValue = m_allContourData[nextOtherContourID].first;
-								theContourValue.push_back(tempContourValue);
-							}
-
-							//如果寻找到最后一个点，其下一个点则为起始点
-							if (nextOtherID == (m_allCrossPoints.size() - 1))
-							{
-								nextPoint = m_allCrossPoints[0].second;
-								nextContourID = m_allCrossPoints[0].first;
-								++closeNum[0];
-
-								//若该点不为边界顶点，记录其所在等值线的值
-								if (nextContourID != -1)
-								{
-									tempContourValue = m_allContourData[nextContourID].first;
-									theContourValue.push_back(tempContourValue);
-								}
-							}
-							else
-							{
-								nextPoint = m_allCrossPoints[nextOtherID + 1].second;
-								nextContourID = m_allCrossPoints[nextOtherID + 1].first;
-								++closeNum[nextOtherID + 1];
-
-								//若该点不为边界顶点，记录其所在等值线的值
-								if (nextContourID != -1)
-								{
-									tempContourValue = m_allContourData[nextContourID].first;
-									theContourValue.push_back(tempContourValue);
-								}
-							}
-						}
-
-					}
+					newContour.push_back(startContour[id]);
 				}
 			}
-
-			double sumVal = 0.0;//用来求一条封闭等值线的所有端点所在等值线的值的和
-			double theVal;//存储新封闭的等值线的值
-			int theVecSize = theContourValue.size();
-			for (int k = 0; k < theVecSize; k++)
+			else
 			{
-				sumVal = sumVal + theContourValue[k];
+				for (int id = startContour.size() - 1; id > 0; id--)
+				{
+					newContour.push_back(startContour[id]);
+				}
 			}
-			theVal = sumVal / theVecSize;
-			//将新封闭的等值线以及其值存起来
-			m_allClosedContourData.push_back(std::make_pair(theVal, tempNewContour));
-			tempNewContour = QPolygonF();
-			theContourValue.clear();
+			newContourValue.push_back(m_allContourData[startContourId].first);
 		}
+
+		double sumVal = 0.0; //用来求一条封闭等值线的所有端点所在等值线的值的和
+		double theVal; //存储新封闭的等值线的值
+		for (auto& value : newContourValue)
+		{
+			sumVal = sumVal + value;
+		}
+		theVal = sumVal / newContourValue.size();
+		//将新封闭的等值线以及其值存起来
+		m_allClosedContourData.push_back(std::make_pair(theVal, newContour));
+		newContour = QPolygonF();
 	}
 
-	std::vector<int> tst;
-	for (int j = 0; j < m_allCrossPoints.size(); j++)
-	{
-		tst.push_back(closeNum[j]);
-	}
-
-	delete[] closeNum;
+	delete []closeNum;
 	closeNum = nullptr;
-}
-
-//计算未封闭等值线端点到边界左上图廓点的距离（特殊矩形边界适用）
-double ContourClose::getDistance(QPointF crossPoint)
-{
-	double minX = 0.0;//最小x值
-	double minY = 0.0;//最小y值
-	double maxX = 0.0;//最大x值
-	double maxY = 0.0;//最大y值
-
-	//读取边界数据值
-	ReadData *readFileData = new ReadData();
-	readFileData->readContourData();
-	minX = readFileData->getMinX();
-	minY = readFileData->getMinY();
-	maxX = readFileData->getMaxX();
-	maxY = readFileData->getMaxY();
-	delete readFileData;
-
-	//矩形边界的四个顶点坐标
-	QPointF rectPointA = QPointF(minX, maxY);
-	QPointF rectPointD = QPointF(maxX, maxY);
-	QPointF rectPointC = QPointF(maxX, minY);
-	QPointF rectPointB = QPointF(minX, minY);
-	double disAB = fabs(rectPointB.y() - rectPointA.y());
-	double disBC = fabs(rectPointC.x() - rectPointB.x());
-	double disCD = fabs(rectPointD.y() - rectPointC.y());
-	//等值线端点到边界左上图廓点的距离
-	double ptpDistance = 0.0;//ptp means point to point
-
-	//端点在线段AB上
-	if (fabs(crossPoint.x() - rectPointA.x()) < 1e-6)
-	{
-		ptpDistance = fabs(crossPoint.y() - rectPointA.y());
-		return ptpDistance;
-	}
-
-	//端点在线段BC上
-	else if (fabs(crossPoint.y() - rectPointB.y()) < 1e-6)
-	{
-		ptpDistance = fabs(crossPoint.x() - rectPointB.x()) + disAB;
-		return ptpDistance;
-	}
-
-	//端点在线段CD上
-	else if (fabs(crossPoint.x() - rectPointC.x()) < 1e-6)
-	{
-		ptpDistance = fabs(crossPoint.y() - rectPointC.y()) + disAB + disBC;
-		return ptpDistance;
-	}
-
-	//端点在线段DA上
-	else if (fabs(crossPoint.y() - rectPointD.y()) < 1e-6)
-	{
-		ptpDistance = fabs(crossPoint.x() - rectPointD.x()) + disAB + disBC + disCD;
-		return ptpDistance;
-	}
-
-	//端点不在边界线上，出错
-	else
-	{
-		return ptpDistance;
-	}
 }
 
 //计算未封闭等值线端点到边界左上图廓点的距离（任意边界适用）
 double ContourClose::getDistance(std::pair<int, QPointF> crossPoint)
 {
-	double minX = 0.0;//最小x值
-	double minY = 0.0;//最小y值
-	double maxX = 0.0;//最大x值
-	double maxY = 0.0;//最大y值
-
-	//读取边界数据值
-	ReadData *readFileData = new ReadData();
-	readFileData->readContourData();
-	minX = readFileData->getMinX();
-	minY = readFileData->getMinY();
-	maxX = readFileData->getMaxX();
-	maxY = readFileData->getMaxY();
-	delete readFileData;
-
 	//矩形边界的四个顶点坐标
-	QPointF rectPointA = QPointF(minX, maxY);
-	QPointF rectPointD = QPointF(maxX, maxY);
-	QPointF rectPointC = QPointF(maxX, minY);
-	QPointF rectPointB = QPointF(minX, minY);
+	QPointF rectPointA = m_rect.rectPointA;
+	QPointF rectPointD = m_rect.rectPointD;
+	QPointF rectPointC = m_rect.rectPointC;
+	QPointF rectPointB = m_rect.rectPointB;
 
 	//边界顶点集合
 	std::vector<QPointF> boundaryVec;
@@ -485,7 +228,7 @@ double ContourClose::getDistance(std::pair<int, QPointF> crossPoint)
 		for (int i = 0; i < boundaryVec.size(); i++)
 		{
 			//判断点是否在边界线，如果在，求出其所在边界的第一个点的序列号
-			flag = pointOnLine(crossPoint.second, boundaryVec[i], boundaryVec[i + 1]);
+			flag = isPointOnLine(crossPoint.second, boundaryVec[i], boundaryVec[i + 1]);
 			if (flag)
 			{
 				boundID = i;
@@ -499,16 +242,16 @@ double ContourClose::getDistance(std::pair<int, QPointF> crossPoint)
 	//计算第boundID个点到第一个点的距离
 	if (boundID == 0)
 	{
-		ptpDistance = twoPointDistance(crossPoint.second, boundaryVec[0]);
+		ptpDistance = calculateTwoPointDistance(crossPoint.second, boundaryVec[0]);
 	}
 	else
 	{
 		for (int i = 0; i < boundID; i++)
 		{
-			disSum = disSum + twoPointDistance(boundaryVec[i], boundaryVec[i + 1]);
+			disSum = disSum + calculateTwoPointDistance(boundaryVec[i], boundaryVec[i + 1]);
 		}
 
-		ptpDistance = disSum + twoPointDistance(crossPoint.second, boundaryVec[boundID]);
+		ptpDistance = disSum + calculateTwoPointDistance(crossPoint.second, boundaryVec[boundID]);
 	}
 
 	return ptpDistance;
@@ -516,7 +259,7 @@ double ContourClose::getDistance(std::pair<int, QPointF> crossPoint)
 }
 
 //判断点是否在直线上
-bool ContourClose::pointOnLine(QPointF tPoint, QPointF sPoint, QPointF ePoint)
+bool ContourClose::isPointOnLine(QPointF tPoint, QPointF sPoint, QPointF ePoint)
 {
 	double x1, y1, x2, y2, x0, y0;
 	x1 = sPoint.x();
@@ -538,7 +281,7 @@ bool ContourClose::pointOnLine(QPointF tPoint, QPointF sPoint, QPointF ePoint)
 }
 
 //求两点之间的距离
-double ContourClose::twoPointDistance(QPointF point1, QPointF point2)
+double ContourClose::calculateTwoPointDistance(QPointF point1, QPointF point2)
 {
 	return sqrt((point1.x() - point2.x()) * (point1.x() - point2.x())
 		+ (point1.y() - point2.y()) * (point1.y() - point2.y()));
@@ -582,3 +325,141 @@ void ContourClose::quickSort(std::vector<std::pair<int, double>> allDistVec, int
 	}
 }
 
+PointLocation ContourClose::getPointLocation(QPointF point)
+{
+	//矩形边界的四个顶点坐标
+	QPointF rectPointA = m_rect.rectPointA;
+	QPointF rectPointD = m_rect.rectPointD;
+	QPointF rectPointC = m_rect.rectPointC;
+	QPointF rectPointB = m_rect.rectPointB;
+	double disAB = fabs(rectPointB.y() - rectPointA.y());
+	double disBC = fabs(rectPointC.x() - rectPointB.x());
+	double disCD = fabs(rectPointD.y() - rectPointC.y());
+	//等值线端点到边界左上图廓点的距离
+	double ptpDistance = 0.0;//ptp means point to point
+
+	//端点在线段AB上
+	if (fabs(point.x() - rectPointA.x()) < 1e-6)
+	{
+		return kAB;
+	}
+	else if (fabs(point.y() - rectPointB.y()) < 1e-6) //端点在线段BC上
+	{
+		return kBC;
+	}
+	else if (fabs(point.x() - rectPointC.x()) < 1e-6) //端点在线段CD上
+	{
+		return kCD;
+	}
+	else if (fabs(point.y() - rectPointD.y()) < 1e-6) //端点在线段DA上
+	{
+		return kDA;
+	}
+	else //端点不在边界线上，出错
+	{
+		return kErrorLocation;
+	}
+}
+
+double ContourClose::calculateTrapezoidArea(QPointF point1, QPointF point2, QPointF point3, QPointF point4)
+{
+	/******************梯形结构********************
+	   point1 ______point2
+			 |      \
+			 |       \
+			 |        \
+			 |_________\
+	   point4        point3
+	*********************************************/
+
+	double upDist = calculateTwoPointDistance(point1, point2);
+	double downDist = calculateTwoPointDistance(point3, point4);
+	double height = calculateTwoPointDistance(point1, point4);
+
+	return (upDist + downDist) * height / 2;
+}
+
+std::pair<QPointF, QPointF> ContourClose::getRectPointsInTrapezoid(QPointF start, QPointF end, PointLocation location)
+{
+	// 矩形面积
+	double rectArea = calculateTrapezoidArea(m_rect.rectPointA, m_rect.rectPointB, m_rect.rectPointC, m_rect.rectPointD);
+
+	if (location == kAB || location == kCD)
+	{
+		double trapezoidArea = calculateTrapezoidArea(start, m_rect.rectPointB, m_rect.rectPointC, end);
+		if (trapezoidArea / rectArea < 0.5)
+		{
+			return std::make_pair(m_rect.rectPointB, m_rect.rectPointC);
+		}
+		else
+		{
+			return std::make_pair(m_rect.rectPointA, m_rect.rectPointD);
+		}
+	}
+	else if (location == kBC || location == kDA)
+	{
+		double trapezoidArea = calculateTrapezoidArea(m_rect.rectPointA, m_rect.rectPointB, start, end);
+		if (trapezoidArea / rectArea < 0.5)
+		{
+			return std::make_pair(m_rect.rectPointA, m_rect.rectPointB);
+		}
+		else
+		{
+			return std::make_pair(m_rect.rectPointC, m_rect.rectPointD);
+		}
+		 
+	}
+	else
+	{
+		// error
+	}
+}
+
+bool ContourClose::isTheSamePoint(QPointF p1, QPointF p2)
+{
+	if (fabs(p1.x() - p2.x()) < 1e-6 && fabs(p1.y() - p2.y()) < 1e-6)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+int ContourClose::getIndexInAllCrossedPointsSortedByDist(QPointF point)
+{
+	for (size_t i = 0; i < m_allCrossedPointsSortedByDist.size(); i++)
+	{
+		QPointF p = std::get<2>(m_allCrossedPointsSortedByDist[i]);
+		if (isTheSamePoint(p, point))
+		{
+			return i;
+		}
+	}
+
+	return -1;
+}
+
+QPointF ContourClose::getAnotherEndPointOnContour(int contourId, QPointF point)
+{
+	QPointF endPoint1 = m_allContourData[contourId].second.first();
+	QPointF endPoint2 = m_allContourData[contourId].second.back();
+	if (isTheSamePoint(endPoint1, point))
+	{
+		return endPoint2;
+	}
+
+	return endPoint1;
+}
+
+int ContourClose::getPointIndexInContour(int contourId, QPointF point)
+{
+	QPointF endPoint1 = m_allContourData[contourId].second.first();
+	QPointF endPoint2 = m_allContourData[contourId].second.back();
+
+	if (isTheSamePoint(point, endPoint1))
+	{
+		return 0;
+	}
+
+	return m_allContourData[contourId].second.size() - 1;
+}
