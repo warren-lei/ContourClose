@@ -4,16 +4,6 @@
 #include <map>
 #include <qpolygon.h>
 
-enum PointLocation
-{
-	kAB = 0,
-	kBC,
-	kCD,
-	kDA,
-	kErrorLocation
-};
-
-
 /******************矩形结构********************
         A _____________ D
 		 |             |
@@ -39,22 +29,17 @@ public:
 	// 对等值线数据进行预处理
 	void preprocessContourData();
 	void closeContour();//封闭等值线
-	void closeContour1();
 	double getDistance(std::pair<int, QPointF> crossPoint);//计算未封闭等值线端点到边界左上图廓点的距离
 	bool isPointOnLine(QPointF tPoint, QPointF sPoint, QPointF ePoint);//判断点是否在直线上
 	double calculateTwoPointDistance(QPointF point1, QPointF point2);//求两点之间的距离
 	std::vector<std::pair<double, QPolygonF>> getClosedContourData();//获取新构造的闭合等值线数据
 
 	void quickSort(std::vector<std::pair<int, double>> allDistVec, int l, int r);
-	PointLocation getPointLocation(QPointF point);
-	// 计算梯形的面积
-	double calculateTrapezoidArea(QPointF point1, QPointF point2, QPointF point3, QPointF point4);
-	// 获取面积较小的梯形所包含的两个边界点
-	std::pair<QPointF, QPointF> getRectPointsInTrapezoid(QPointF start, QPointF end, PointLocation location);
 	bool isTheSamePoint(QPointF p1, QPointF p2);
 	int getIndexInAllCrossedPointsSortedByDist(QPointF point);
 	QPointF getAnotherEndPointOnContour(int contourId, QPointF point);
 	int getPointIndexInContour(int contourId, QPointF point);
+	Rectangle getRectange() const;
 
 private:
 	std::vector<std::pair<double, QPolygonF>> m_allContourData;//原始等值线数据

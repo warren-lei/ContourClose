@@ -24,9 +24,6 @@ ContouDraw::~ContouDraw()
 //等值线绘制及颜色填充
 void ContouDraw::paintEvent(QPaintEvent *event)
 {
-	ReadData *readFileData = new ReadData();
-	readFileData->readContourData();
-
 	std::vector<std::pair<double, QPolygonF> > closedPolygonData;
 	ContourClose *closedData = new ContourClose();
 	closedData->closeContour();
@@ -52,15 +49,11 @@ void ContouDraw::paintEvent(QPaintEvent *event)
 		}
 	}
 
-	double minX = 0.0;//最小x值
-	double minY = 0.0;//最小y值
-	double maxX = 0.0;//最大x值
-	double maxY = 0.0;//最大y值
-	minX = readFileData->getMinX();
-	minY = readFileData->getMinY();
-	maxX = readFileData->getMaxX();
-	maxY = readFileData->getMaxY();
-	delete readFileData;
+	Rectangle rect = closedData->getRectange();
+	double minX = rect.rectPointA.x();//最小x值
+	double minY = rect.rectPointB.y();//最小y值
+	double maxX = rect.rectPointC.x();//最大x值
+	double maxY = rect.rectPointD.y();//最大y值
 
 	//设置边界高度与宽度
 	double borderWidth = (maxX - minX) / 50.0;

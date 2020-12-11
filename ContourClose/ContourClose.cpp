@@ -325,96 +325,6 @@ void ContourClose::quickSort(std::vector<std::pair<int, double>> allDistVec, int
 	}
 }
 
-PointLocation ContourClose::getPointLocation(QPointF point)
-{
-	//矩形边界的四个顶点坐标
-	QPointF rectPointA = m_rect.rectPointA;
-	QPointF rectPointD = m_rect.rectPointD;
-	QPointF rectPointC = m_rect.rectPointC;
-	QPointF rectPointB = m_rect.rectPointB;
-	double disAB = fabs(rectPointB.y() - rectPointA.y());
-	double disBC = fabs(rectPointC.x() - rectPointB.x());
-	double disCD = fabs(rectPointD.y() - rectPointC.y());
-	//等值线端点到边界左上图廓点的距离
-	double ptpDistance = 0.0;//ptp means point to point
-
-	//端点在线段AB上
-	if (fabs(point.x() - rectPointA.x()) < 1e-6)
-	{
-		return kAB;
-	}
-	else if (fabs(point.y() - rectPointB.y()) < 1e-6) //端点在线段BC上
-	{
-		return kBC;
-	}
-	else if (fabs(point.x() - rectPointC.x()) < 1e-6) //端点在线段CD上
-	{
-		return kCD;
-	}
-	else if (fabs(point.y() - rectPointD.y()) < 1e-6) //端点在线段DA上
-	{
-		return kDA;
-	}
-	else //端点不在边界线上，出错
-	{
-		return kErrorLocation;
-	}
-}
-
-double ContourClose::calculateTrapezoidArea(QPointF point1, QPointF point2, QPointF point3, QPointF point4)
-{
-	/******************梯形结构********************
-	   point1 ______point2
-			 |      \
-			 |       \
-			 |        \
-			 |_________\
-	   point4        point3
-	*********************************************/
-
-	double upDist = calculateTwoPointDistance(point1, point2);
-	double downDist = calculateTwoPointDistance(point3, point4);
-	double height = calculateTwoPointDistance(point1, point4);
-
-	return (upDist + downDist) * height / 2;
-}
-
-std::pair<QPointF, QPointF> ContourClose::getRectPointsInTrapezoid(QPointF start, QPointF end, PointLocation location)
-{
-	// 矩形面积
-	double rectArea = calculateTrapezoidArea(m_rect.rectPointA, m_rect.rectPointB, m_rect.rectPointC, m_rect.rectPointD);
-
-	if (location == kAB || location == kCD)
-	{
-		double trapezoidArea = calculateTrapezoidArea(start, m_rect.rectPointB, m_rect.rectPointC, end);
-		if (trapezoidArea / rectArea < 0.5)
-		{
-			return std::make_pair(m_rect.rectPointB, m_rect.rectPointC);
-		}
-		else
-		{
-			return std::make_pair(m_rect.rectPointA, m_rect.rectPointD);
-		}
-	}
-	else if (location == kBC || location == kDA)
-	{
-		double trapezoidArea = calculateTrapezoidArea(m_rect.rectPointA, m_rect.rectPointB, start, end);
-		if (trapezoidArea / rectArea < 0.5)
-		{
-			return std::make_pair(m_rect.rectPointA, m_rect.rectPointB);
-		}
-		else
-		{
-			return std::make_pair(m_rect.rectPointC, m_rect.rectPointD);
-		}
-		 
-	}
-	else
-	{
-		// error
-	}
-}
-
 bool ContourClose::isTheSamePoint(QPointF p1, QPointF p2)
 {
 	if (fabs(p1.x() - p2.x()) < 1e-6 && fabs(p1.y() - p2.y()) < 1e-6)
@@ -462,4 +372,9 @@ int ContourClose::getPointIndexInContour(int contourId, QPointF point)
 	}
 
 	return m_allContourData[contourId].second.size() - 1;
+}
+
+Rectangle ContourClose::getRectange() const
+{
+	return m_rect;
 }
