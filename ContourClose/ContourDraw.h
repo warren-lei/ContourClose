@@ -23,7 +23,6 @@ private slots:
 
 protected:
 	//等值线绘制及颜色填充
-	void paintEvent1(QPaintEvent *event);
 	void paintEvent(QPaintEvent* event);
 
 	void setClickBtns();
