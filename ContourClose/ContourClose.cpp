@@ -3,6 +3,7 @@
 
 #include <math.h>
 #include <QLineF>
+#include <assert.h>
 
 ContourClose::ContourClose()
 {
